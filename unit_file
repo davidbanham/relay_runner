@@ -1,0 +1,15 @@
+#/etc/systemd/system/relay_runner.service
+
+[Unit]
+Description=relay_runner
+
+[Service]
+ExecStart=/home/pi/relay_runner
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+RemainAfterExit=no
+Restart=always
+RestartSec=5s
