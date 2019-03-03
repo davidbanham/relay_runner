@@ -1,4 +1,4 @@
-relay_runner:
+relay_runner: main.go
 	GOOS=linux GOARCH=arm GOARM=5 go build
 
 .PHONY: copy
