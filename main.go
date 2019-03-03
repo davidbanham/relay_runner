@@ -70,14 +70,14 @@ func toggler(i int) http.HandlerFunc {
 
 func onner(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pins[i].High()
+		pins[i].Low()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
 func offer(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pins[i].Low()
+		pins[i].High()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
@@ -88,7 +88,7 @@ func stater(i int) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 
-		if state == rpio.High {
+		if state == rpio.Low {
 			w.Write([]byte("{\"on\": true}"))
 		} else {
 			w.Write([]byte("{\"off\": true}"))
@@ -201,7 +201,7 @@ input:checked + .slider:before {
 	{{ range $i, $pin := .Pins }}
 	<div>
 		<h4>Relay {{$i}}</h4>
-		{{ if (eq $pin.Read 0)}}
+		{{ if (eq $pin.Read 1)}}
 		<form method="post" action="/pins/{{$i}}/on" onchange="this.submit()">
 			<label class="switch">
 				<input type="checkbox">
