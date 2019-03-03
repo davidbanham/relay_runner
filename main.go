@@ -44,6 +44,7 @@ func main() {
 		}
 		pin := rpio.Pin(num)
 		pin.Output()
+		pin.High()
 		pins = append(pins, pin)
 	}
 
