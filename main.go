@@ -162,6 +162,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="refresh" content="30">
 <title>{{.Title}}</title>
 <meta http-equiv="X-UA-Compatible" content="IE=Edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
