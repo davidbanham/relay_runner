@@ -144,7 +144,11 @@ type PageData struct {
 
 var funcMap = template.FuncMap{
 	"howLong": func(t time.Time) string {
-		return human_duration.String(t.Sub(time.Now()), "minute")
+		answer := human_duration.String(t.Sub(time.Now()), "minute")
+		if answer == "" {
+			return human_duration.String(t.Sub(time.Now()), "second")
+		}
+		return answer
 	},
 }
 
