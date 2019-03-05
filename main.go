@@ -5,15 +5,23 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/alecthomas/template"
+	"github.com/davidbanham/human_duration"
 	"github.com/davidbanham/required_env"
 
 	rpio "github.com/stianeikeland/go-rpio/v4"
 )
 
 var limit = 0
-var pins = []rpio.Pin{}
+
+type pinPair struct {
+	Pin    rpio.Pin
+	StopAt time.Time
+}
+
+var pins = []pinPair{}
 
 var numbers = []int{
 	2, 3, 4, 17, 27, 22, 10, 9, 11, 5, 6, 13, 19, 26, 14, 15, 18, 23, 24, 25, 8, 7, 12, 16, 20, 21,
@@ -25,7 +33,7 @@ func init() {
 	})
 
 	if parsed, err := strconv.Atoi(os.Getenv("NUM_RELAYS")); err != nil {
-		log.Fatal(err)
+		log.Fatal("env input err", err)
 	} else {
 		limit = parsed
 	}
@@ -45,7 +53,9 @@ func main() {
 		pin := rpio.Pin(num)
 		pin.Output()
 		pin.High()
-		pins = append(pins, pin)
+		pins = append(pins, pinPair{
+			Pin: pin,
+		})
 	}
 
 	http.HandleFunc("/", index)
@@ -64,28 +74,56 @@ func main() {
 
 func toggler(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pins[i].Toggle()
+		pins[i].Pin.Toggle()
 		http.Redirect(w, r, "/", http.StatusFound)
+	}
+}
+
+func lengthFromForm(input string) time.Duration {
+	lengthStr := input + "m"
+	length, err := time.ParseDuration(lengthStr)
+	if err != nil {
+		return 0
+	}
+	return length
+}
+
+func timer(i int, length time.Duration, shouldTurnOn bool) {
+	stopAt := time.Now().Add(length)
+
+	pins[i].StopAt = stopAt
+
+	timer := time.NewTimer(length)
+	<-timer.C
+
+	if shouldTurnOn {
+		pins[i].Pin.Low()
+	} else {
+		pins[i].Pin.High()
 	}
 }
 
 func onner(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pins[i].Low()
+		length := lengthFromForm(r.FormValue("length"))
+		if length > 0 {
+			go timer(i, length, false)
+		}
+		pins[i].Pin.Low()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
 func offer(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pins[i].High()
+		pins[i].Pin.High()
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
 func stater(i int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		state := pins[i].Read()
+		state := pins[i].Pin.Read()
 
 		w.WriteHeader(http.StatusOK)
 
@@ -100,8 +138,14 @@ func stater(i int) http.HandlerFunc {
 }
 
 type PageData struct {
-	Pins  []rpio.Pin
+	Pins  []pinPair
 	Title string
+}
+
+var funcMap = template.FuncMap{
+	"howLong": func(t time.Time) string {
+		return human_duration.String(t.Sub(time.Now()), "minute")
+	},
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +153,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 		Pins:  pins,
 		Title: "Relay Runnner",
 	}
-	tmpl, err := template.New("index").Parse(`
+	tmpl := template.Must(template.New("index").Funcs(funcMap).Parse(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -120,94 +164,101 @@ func index(w http.ResponseWriter, r *http.Request) {
 <meta name="description" content="Turn things on. Or off. I don't mind.">
 <style type="text/css">
 .wrapper {
-  display: grid;
+	display: grid;
 	grid-template-columns: repeat( auto-fit, minmax(250px, 1fr) );
-  grid-gap: 10px;
-  grid-auto-rows: minmax(100px, auto);
+	grid-gap: 10px;
+	grid-auto-rows: minmax(100px, auto);
 
-  text-align: center;
+	text-align: center;
 }
 @media only screen and (min-width: 1000px) {
-  .wrapper {
-    margin: 20%;
-    margin-top: 0px;
-  }
+	.wrapper {
+		margin: 20%;
+		margin-top: 0px;
+	}
 }
  /* The switch - the box around the slider */
 .switch {
-  position: relative;
-  display: inline-block;
-  width: 60px;
-  height: 34px;
+	position: relative;
+	display: inline-block;
+	width: 60px;
+	height: 34px;
 }
 
 /* Hide default HTML checkbox */
 .switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
+	opacity: 0;
+	width: 0;
+	height: 0;
 }
 
 /* The slider */
 .slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #ccc;
+	-webkit-transition: .4s;
+	transition: .4s;
 }
 
 .slider:before {
-  position: absolute;
-  content: "";
-  height: 26px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
-  background-color: white;
-  -webkit-transition: .4s;
-  transition: .4s;
+	position: absolute;
+	content: "";
+	height: 26px;
+	width: 26px;
+	left: 4px;
+	bottom: 4px;
+	background-color: white;
+	-webkit-transition: .4s;
+	transition: .4s;
 }
 
 input:checked + .slider {
-  background-color: #2196F3;
+	background-color: #2196F3;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
+	box-shadow: 0 0 1px #2196F3;
 }
 
 input:checked + .slider:before {
-  -webkit-transform: translateX(26px);
-  -ms-transform: translateX(26px);
-  transform: translateX(26px);
+	-webkit-transform: translateX(26px);
+	-ms-transform: translateX(26px);
+	transform: translateX(26px);
 }
 
 /* Rounded sliders */
 .slider.round {
-  border-radius: 34px;
+	border-radius: 34px;
 }
 
 .slider.round:before {
-  border-radius: 50%;
+	border-radius: 50%;
+}
+
+.timeinput {
+	margin-top: 20px;
+	max-width: 50px;
 }
 </style>
 </head>
 <body>
 	<div class="wrapper">
-	{{ range $i, $pin := .Pins }}
+	{{ range $i, $pair := .Pins }}
 	<div>
 		<h4>Relay {{$i}}</h4>
-		{{ if (eq $pin.Read 1)}}
+		{{ if (eq $pair.Pin.Read 1)}}
 		<form method="post" action="/pins/{{$i}}/on" onchange="this.submit()">
 			<label class="switch">
 				<input type="checkbox">
 				<span class="slider round"></span>
 			</label>
+			<br>
+			<input class="timeinput" type="number" step="1" name="length">
 		</form>
 		{{ else }}
 		<form method="post" action="/pins/{{$i}}/off" onchange="this.submit()">
@@ -216,17 +267,15 @@ input:checked + .slider:before {
 				<span class="slider round"></span>
 			</label>
 		</form>
+		<p>Off in {{ howLong $pair.StopAt }}</p>
 		{{ end }}
 	</div>
 	{{ end }}
 	</div>
 </body>
 </html>
-	`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if tmpl.Execute(w, data) != nil {
-		log.Fatal(err)
+	`))
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Fatal("template error", err)
 	}
 }
