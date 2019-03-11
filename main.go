@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -17,8 +18,15 @@ import (
 var limit = 0
 
 type pinPair struct {
-	Pin    rpio.Pin
-	StopAt time.Time
+	Pin    rpio.Pin  `json:"pin"`
+	StopAt time.Time `json:"stop_at"`
+}
+
+type PayloadPin struct {
+	StopAt time.Time `json:"stop_at"`
+	Name   string    `json:"name"`
+	State  bool      `json:"state"`
+	Id     int       `json:"id"`
 }
 
 var pins = []pinPair{}
@@ -59,6 +67,10 @@ func main() {
 	}
 
 	http.HandleFunc("/", index)
+	http.HandleFunc("/spa", spaIndex)
+	http.HandleFunc("/css/main.css", css)
+
+	http.HandleFunc("/pins", currentState)
 
 	p := 0
 	for p < limit {
@@ -130,11 +142,32 @@ func stater(i int) http.HandlerFunc {
 		if state == rpio.Low {
 			w.Write([]byte("{\"on\": true}"))
 		} else {
-			w.Write([]byte("{\"off\": true}"))
+			w.Write([]byte("{\"on\": false}"))
 		}
 
 		return
 	}
+}
+
+type pinsPayload struct {
+	Pins []PayloadPin `json:"pins"`
+}
+
+func currentState(w http.ResponseWriter, r *http.Request) {
+	payload := []PayloadPin{}
+	for i, pin := range pins {
+		pp := PayloadPin{
+			Name:   strconv.Itoa(i),
+			State:  pin.Pin.Read() == rpio.Low,
+			StopAt: pin.StopAt,
+			Id:     i,
+		}
+		payload = append(payload, pp)
+	}
+
+	json.NewEncoder(w).Encode(pinsPayload{
+		Pins: payload,
+	})
 }
 
 type PageData struct {
@@ -283,4 +316,13 @@ input:checked + .slider:before {
 	if err := tmpl.Execute(w, data); err != nil {
 		log.Fatal("template error", err)
 	}
+}
+
+func spaIndex(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(indexPage))
+}
+
+func css(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css")
+	w.Write([]byte(cssPage))
 }

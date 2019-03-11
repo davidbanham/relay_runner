@@ -1,5 +1,8 @@
-relay_runner: main.go
-	GOOS=linux GOARCH=arm GOARM=5 go build
+relay_runner: *.go frontend frontend/*
+	GO111MODULE=on GOOS=linux GOARCH=arm GOARM=5 packr2 build
+
+frontend: frontend/src/*
+	cd frontend && elm make src/*.elm && cd ..
 
 .PHONY: copy
 copy: relay_runner
